@@ -31,7 +31,7 @@ public class WorkflowValidator {
         // if a workflow has a restart step, at least one of the previous steps must be scheduled to prevent an infinite loop of immediate executions
         List<WorkflowStepRepresentation> steps = ofNullable(rep.getSteps()).orElse(List.of());
         if (steps.isEmpty()) {
-            return;
+            throw new WorkflowInvalidStateException("Workflow should have at least one step.");
         }
         steps.forEach(step -> validateStep(session, step));
 

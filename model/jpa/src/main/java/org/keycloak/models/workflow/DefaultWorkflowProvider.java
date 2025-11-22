@@ -133,7 +133,7 @@ public class DefaultWorkflowProvider implements WorkflowProvider {
             for (ScheduledStep scheduled : stateProvider.getDueScheduledSteps(workflow)) {
                 // check if the resource is still passes the workflow's resource conditions
                 DefaultWorkflowExecutionContext context = new DefaultWorkflowExecutionContext(session, workflow, scheduled);
-                EventBasedWorkflow provider = new EventBasedWorkflow(session, getWorkflowResourceTypes(workflow), getWorkflowComponent(workflow.getId()));
+                EventBasedWorkflow provider = new EventBasedWorkflow(session, workflow.getSupportedType(), getWorkflowComponent(workflow.getId()));
                 if (!provider.validateResourceConditions(context)) {
                     log.debugf("Resource %s is no longer eligible for workflow %s. Cancelling execution of the workflow.",
                             scheduled.resourceId(), scheduled.workflowId());
@@ -154,10 +154,8 @@ public class DefaultWorkflowProvider implements WorkflowProvider {
 
     @Override
     public void activate(Workflow workflow, ResourceType type, String resourceId) {
-        Set<ResourceType> supportedTypes = getWorkflowResourceTypes(workflow);
-        if (!supportedTypes.contains(type)) {
-            String formatted = supportedTypes.stream().map(ResourceType::name).collect(Collectors.joining(", "));
-            throw new BadRequestException("Resource Type '%s' is not supported for this workflow (supports %s)".formatted(type.name(), formatted));
+        if (type != workflow.getSupportedType()) {
+            throw new BadRequestException("Resource Type '%s' is not supported for this workflow (supports %s)".formatted(type.name(), workflow.getSupportedType()));
         }
 
         processEvent(Stream.of(workflow), new AdhocWorkflowEvent(type, resourceId));
@@ -172,13 +170,11 @@ public class DefaultWorkflowProvider implements WorkflowProvider {
     public void activateForAllEligibleResources(Workflow workflow) {
         if (workflow.isEnabled()) {
             WorkflowProvider provider = getWorkflowProvider(workflow);
-            Set<ResourceType> resources = getWorkflowResourceTypes(workflow);
-            for (ResourceType type : resources) {
-                ResourceTypeSelector selector = provider.getResourceTypeSelector(type);
-                selector.getResourceIds(workflow)
-                        .forEach(resourceId -> processEvent(Stream.of(workflow), new AdhocWorkflowEvent(type, resourceId)));
+            ResourceType supportedType = workflow.getSupportedType();
+            ResourceTypeSelector selector = provider.getResourceTypeSelector(supportedType);
+            selector.getResourceIds(workflow)
+                    .forEach(resourceId -> processEvent(Stream.of(workflow), new AdhocWorkflowEvent(supportedType, resourceId)));
             }
-        }
     }
 
     @Override
@@ -207,23 +203,6 @@ public class DefaultWorkflowProvider implements WorkflowProvider {
 
     WorkflowStepProvider getStepProvider(WorkflowStep step) {
         return getStepProviderFactory(step).create(session, realm.getComponent(step.getId()));
-    }
-
-    private Set<ResourceType> getWorkflowResourceTypes(Workflow workflow) {
-        DefaultWorkflowProvider provider = (DefaultWorkflowProvider) getWorkflowProvider(workflow);
-        return workflow.getSteps()
-                .map(provider::getStepProviderFactory)
-                .map(WorkflowStepProviderFactory::getTypes)
-                .reduce(EnumSet.allOf(ResourceType.class), (s1, s2) -> {
-                    s1.retainAll(s2);
-                    return s1;
-                });
-    }
-
-    private void updateWorkflowConfig(Workflow workflow, MultivaluedHashMap<String, String> config) {
-        ComponentModel component = getWorkflowComponent(workflow.getId());
-        component.setConfig(config);
-        realm.updateComponent(component);
     }
 
     private ComponentModel getWorkflowComponent(String id) {
@@ -265,7 +244,7 @@ public class DefaultWorkflowProvider implements WorkflowProvider {
                 return;
             }
 
-            EventBasedWorkflow provider = new EventBasedWorkflow(session, getWorkflowResourceTypes(workflow), getWorkflowComponent(workflow.getId()));
+            EventBasedWorkflow provider = new EventBasedWorkflow(session, workflow.getSupportedType(), getWorkflowComponent(workflow.getId()));
 
             try {
                 ScheduledStep scheduledStep = scheduledSteps.get(workflow.getId());

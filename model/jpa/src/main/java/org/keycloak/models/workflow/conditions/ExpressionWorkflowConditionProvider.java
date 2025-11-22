@@ -6,12 +6,15 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 
 import org.keycloak.models.KeycloakSession;
+import org.keycloak.models.workflow.ResourceType;
 import org.keycloak.models.workflow.WorkflowConditionProvider;
 import org.keycloak.models.workflow.WorkflowExecutionContext;
 import org.keycloak.models.workflow.conditions.expression.BooleanConditionParser.EvaluatorContext;
 import org.keycloak.models.workflow.conditions.expression.ConditionEvaluator;
 import org.keycloak.models.workflow.conditions.expression.EvaluatorUtils;
 import org.keycloak.models.workflow.conditions.expression.PredicateEvaluator;
+
+import java.util.Set;
 
 public class ExpressionWorkflowConditionProvider implements WorkflowConditionProvider {
 
@@ -22,6 +25,11 @@ public class ExpressionWorkflowConditionProvider implements WorkflowConditionPro
     public ExpressionWorkflowConditionProvider(KeycloakSession session, String expression) {
         this.session = session;
         this.expression = expression;
+    }
+
+    @Override
+    public Set<ResourceType> supportedTypes() {
+
     }
 
     @Override

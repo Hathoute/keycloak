@@ -21,7 +21,9 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import jakarta.ws.rs.BadRequestException;
@@ -38,6 +40,7 @@ import static java.util.Optional.ofNullable;
 import static org.keycloak.representations.workflows.WorkflowConstants.CONFIG_ENABLED;
 import static org.keycloak.representations.workflows.WorkflowConstants.CONFIG_ERROR;
 import static org.keycloak.representations.workflows.WorkflowConstants.CONFIG_NAME;
+import static org.keycloak.representations.workflows.WorkflowConstants.CONFIG_SUPPORTS;
 
 public class Workflow {
 
@@ -83,6 +86,12 @@ public class Workflow {
         return notBefore;
     }
 
+    public ResourceType getSupportedType() {
+        return Optional.ofNullable(config).map(c -> c.getFirst(CONFIG_SUPPORTS))
+                .map(ResourceType::valueOf)
+                .orElse(null);
+    }
+
     public void setNotBefore(String notBefore) {
         this.notBefore = notBefore;
     }
@@ -99,6 +108,13 @@ public class Workflow {
             config = new MultivaluedHashMap<>();
         }
         config.putSingle(CONFIG_ERROR, message);
+    }
+
+    public void setSupportedType(ResourceType resourceType) {
+        if (config == null) {
+            config = new MultivaluedHashMap<>();
+        }
+        config.putSingle(CONFIG_SUPPORTS, resourceType.name());
     }
 
     public void updateConfig(MultivaluedHashMap<String, String> config, List<WorkflowStepRepresentation> steps) {
@@ -143,12 +159,17 @@ public class Workflow {
             allowedTypes.retainAll(stepProvider.getTypes());
         }
 
-        // - Should we allow workflows to have more than one supported type ?
-        // - allowedTypes should probably be saved in config, since we do not allow changing steps,
-        // so that we don't recompute it.
         if (allowedTypes.isEmpty()) {
             throw new ModelValidationException("Steps provided are not compatible with each other.");
         }
+        else if (allowedTypes.size() > 1) {
+            String formattedTypes = allowedTypes.stream().map(Enum::name).collect(Collectors.joining(", "));
+            throw new ModelValidationException("Steps provided should support a single type, actual: " + formattedTypes);
+        }
+
+        ResourceType supported = allowedTypes.stream().findFirst().orElseThrow();
+        setSupportedType(supported);
+        updateConfig(config, null);
     }
 
     private void addStep(WorkflowStep step) {
